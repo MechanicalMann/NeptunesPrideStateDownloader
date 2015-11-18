@@ -97,7 +97,7 @@ namespace NeptunesPrideStateDownloader
                 // Thanks to Quantumplation for figuring out which tick was which
                 long tick = state.report.tick, player = state.report.player_uid;
 
-                var filename = $"gamestate_{player:00}_{tick:00000000}.json";
+                var filename = $"gamestate_{game}_{player:00}_{tick:00000000}.json";
 
                 var path = Path.Combine(downloadDir.FullName, filename);
                 if (!File.Exists(path))
