@@ -103,7 +103,7 @@ namespace NeptunesPrideStateDownloader
                 if (!File.Exists(path))
                 {
                     Console.WriteLine($"Found new tick: {tick}, saving state.");
-                    File.WriteAllText(path, json);
+                    File.WriteAllText(path, JsonConvert.SerializeObject(state, Formatting.Indented));
                 }
                 ct.WaitHandle.WaitOne(TimeSpan.FromSeconds(refresh));
             }
