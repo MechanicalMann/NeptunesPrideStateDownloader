@@ -44,7 +44,16 @@ namespace NeptunesPrideStateDownloader
                 { "password", pass },
             };
 
-            _client.UploadValues("http://np.ironhelmet.com/arequest/login", "POST", form);
+            try
+            {
+                _client.UploadValues("http://np.ironhelmet.com/arequest/login", "POST", form);
+            }
+            catch (Exception ex)
+            {
+                Console.WriteLine($"ERROR - Unable to log in: {ex.Message}");
+                WriteDone();
+                return;
+            }
 
             if (_client.CookieContainer.Count == 0)
             {
@@ -81,21 +90,55 @@ namespace NeptunesPrideStateDownloader
 
         private static async Task GetStates(DirectoryInfo downloadDir, string game, int refresh, CancellationToken ct)
         {
+            var iter = 0;
             while (!ct.IsCancellationRequested)
             {
-                var gameParams = new NameValueCollection
+                if (iter > 0)
+                    ct.WaitHandle.WaitOne(TimeSpan.FromSeconds(refresh));
+                iter++;
+                byte[] res;
+                try
                 {
-                    { "type", "order" },
-                    { "order", "full_universe_report" },
-                    { "version", "7" },
-                    { "game_number", game },
-                };
-                var res = await _client.UploadValuesTaskAsync("http://np.ironhelmet.com/grequest/order", "POST", gameParams);
-                var json = Encoding.UTF8.GetString(res);
-                dynamic state = JsonConvert.DeserializeObject(json);
+                    var gameParams = new NameValueCollection
+                    {
+                        { "type", "order" },
+                        { "order", "full_universe_report" },
+                        { "version", "7" },
+                        { "game_number", game },
+                    };
+                    res = await _client.UploadValuesTaskAsync("http://np.ironhelmet.com/grequest/order", "POST", gameParams);
+                }
+                catch (Exception ex)
+                {
+                    Console.WriteLine($"ERROR - Couldn't get the current game state: {ex.Message}");
+                    continue;
+                }
+
+                dynamic state;
+
+                try
+                {
+                    var json = Encoding.UTF8.GetString(res);
+                    state = JsonConvert.DeserializeObject(json);
+                }
+                catch (Exception ex)
+                {
+                    Console.WriteLine($"ERROR - Whatever the server sent us, it ain't JSON: {ex.Message}");
+                    continue;
+                }
 
                 // Thanks to Quantumplation for figuring out which tick was which
-                long tick = state.report.tick, player = state.report.player_uid;
+                long tick, player;
+                try
+                {
+                    player = state.report.player_uid;
+                    tick = state.report.tick;
+                }
+                catch (Exception ex)
+                {
+                    Console.WriteLine($"ERROR - Expected JSON object properties not found: {ex.Message}");
+                    continue;
+                }
 
                 var filename = $"gamestate_{game}_{player:00}_{tick:00000000}.json";
 
@@ -103,9 +146,15 @@ namespace NeptunesPrideStateDownloader
                 if (!File.Exists(path))
                 {
                     Console.WriteLine($"Found new tick: {tick}, saving state.");
-                    File.WriteAllText(path, JsonConvert.SerializeObject(state, Formatting.Indented));
+                    try
+                    {
+                        File.WriteAllText(path, JsonConvert.SerializeObject(state, Formatting.Indented));
+                    }
+                    catch (Exception ex)
+                    {
+                        Console.WriteLine($"ERROR - Unable to write gamestate file: {ex.Message}");
+                    }
                 }
-                ct.WaitHandle.WaitOne(TimeSpan.FromSeconds(refresh));
             }
         }
     }
